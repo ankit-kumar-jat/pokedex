@@ -10,7 +10,11 @@ export default {
         lg: "1280px",
       },
     },
-    extend: {},
+    extend: {
+      dropShadow: {
+        "3d": ["0 20px 20px rgba(0, 0, 0, 0.3)"],
+      },
+    },
   },
   plugins: [],
 } satisfies Config;
