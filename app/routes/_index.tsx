@@ -13,18 +13,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const timings = {};
   const url = new URL(request.url);
   const query = url.searchParams.get("q");
-  const page = url.searchParams.get("page");
-  const pageSize = url.searchParams.get("page-size");
+  const page = Number(url.searchParams.get("page")) || 1;
+  const pageSize = Number(url.searchParams.get("page-size")) || 20;
 
   const { pokemons, count } = await getPokemons({
-    page: Number(page) || 1,
-    pageSize: Number(pageSize) || 20,
+    page: page,
+    pageSize: pageSize,
     timings,
     search: query ?? undefined,
   });
 
   return json(
-    { pokemons, count },
+    { pokemons, count, totalPages: Math.ceil(count / pageSize) },
     {
       headers: {
         "Cache-Control": "public, max-age=1",
@@ -48,53 +48,82 @@ export const meta: MetaFunction = () => {
 };
 
 export default function Index() {
-  const { pokemons } = useLoaderData<typeof loader>();
+  const { pokemons, totalPages } = useLoaderData<typeof loader>();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q");
+  const page = Number(searchParams.get("page")) || 1;
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSearchValue = e.target.value;
     setSearchParams(
       (prev) => {
-        if (newSearchValue) prev.set("q", newSearchValue);
-        else prev.delete("q");
+        if (newSearchValue) {
+          prev.set("q", newSearchValue);
+          prev.delete("page");
+          prev.delete("page-size");
+        } else {
+          prev.delete("q");
+        }
         return prev;
       },
       { preventScrollReset: true }
     );
   };
 
+  const handlePageChange = (newPage: number) => {
+    if (newPage > 0 && newPage <= totalPages) {
+      setSearchParams((prev) => {
+        if (newPage === 1) prev.delete("page");
+        else prev.set("page", newPage.toString());
+
+        return prev;
+      });
+    }
+  };
+
   return (
-    <div>
-      <div className="bg-gray-400 mb-4">
-        <div className="container mx-auto p-4">
-          <h1 className="font-semibold text-lg uppercase tracking-wider">
-            Pokedex
-          </h1>
-        </div>
+    <div className="mb-9 mt-4">
+      <div className="py-4">
+        <input
+          type="text"
+          className="border-2 border-gray-300 px-2 py-1 rounded-lg"
+          placeholder="Search"
+          onChange={debounce({ callback: handleSearchChange, wait: 500 })}
+          defaultValue={q ?? undefined}
+        />
       </div>
-      <div className="container mx-auto px-4">
-        <div className="py-4">
-          <input
-            type="text"
-            className="border-2 border-gray-300 px-2 py-1 rounded-lg"
-            placeholder="Search"
-            onChange={debounce({ callback: handleSearchChange, wait: 500 })}
-            defaultValue={q ?? undefined}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {pokemons.map((pokemon) => (
+          <PokemonCard
+            key={pokemon.id}
+            name={pokemon.name}
+            image={pokemon.image}
+            id={pokemon.id}
+            types={pokemon.types}
           />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-9">
-          {pokemons.map((pokemon) => (
-            <PokemonCard
-              key={pokemon.id}
-              name={pokemon.name}
-              image={pokemon.image}
-              id={pokemon.id}
-              types={pokemon.types}
-            />
-          ))}
-        </div>
+        ))}
+      </div>
+      <div className="p-4 mb-6 flex justify-center gap-6 items-center">
+        <button
+          title="Go to Previous page"
+          onClick={() => handlePageChange(page - 1)}
+          disabled={page === 1}
+          className="text-gray-700 font-medium text-lg"
+        >
+          {"<"} Prev
+        </button>
+        <p className="font-semibold text-gray-600 text-xl">
+          {page}/{totalPages}
+        </p>
+        <button
+          title="Go to Next page"
+          onClick={() => handlePageChange(page + 1)}
+          disabled={page === totalPages}
+          className="text-gray-700 font-medium text-lg"
+        >
+          Next {">"}
+        </button>
       </div>
     </div>
   );
